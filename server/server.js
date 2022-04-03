@@ -2,12 +2,13 @@ import "@babel/polyfill";
 import dotenv from "dotenv";
 import "isomorphic-fetch";
 import createShopifyAuth, { verifyRequest } from "@shopify/koa-shopify-auth";
-import Shopify, { ApiVersion } from "@shopify/shopify-api";
+import Shopify, { ApiVersion, DataType } from "@shopify/shopify-api";
 import Koa from "koa";
 import next from "next";
 import Router from "koa-router";
-import koaBody from 'koa-body';
-import GetCRUD from '../server/Crud/Index'
+import koaBody from "koa-body";
+import GetCRUD from "../server/Crud/Index";
+import { route } from "next/dist/server/router";
 
 dotenv.config();
 const port = parseInt(process.env.PORT, 10) || 8081;
@@ -15,6 +16,9 @@ const dev = process.env.NODE_ENV !== "production";
 const app = next({
   dev,
 });
+var accessTokenExport;
+var shopExport;
+
 const handle = app.getRequestHandler();
 
 Shopify.Context.initialize({
@@ -51,6 +55,8 @@ app.prepare().then(async () => {
         const host = ctx.query.host;
         ACTIVE_SHOPIFY_SHOPS[shop] = scope;
 
+        exportTokens(shop, accessToken);
+
         const responses = await Shopify.Webhooks.Registry.register({
           shop,
           accessToken,
@@ -74,7 +80,7 @@ app.prepare().then(async () => {
     await handle(ctx.req, ctx.res);
     ctx.respond = false;
     ctx.res.statusCode = 200;
-  };  
+  };
   //
 
   //
@@ -88,115 +94,208 @@ app.prepare().then(async () => {
   });
 
   //
-  router.post( 
-    "/api/webhook",
-    async (ctx, next) => {
-      if(ctx.req.method === "POST"){
-        const ifSuccess  = await GetCRUD.post(ctx);
-        if(ifSuccess==0){
-          ctx.response.status = 200;
-          ctx.res.statusCode = 200;
-          ctx.body = {
-              success: false,
-              "Message":"already exist"
-          };  
-        }else{
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success"
-          };
-        }
-      }else{  
-        ctx.response.status = 401;
+  router.post("/api/webhook", async (ctx, next) => {
+    if (ctx.req.method === "POST") {
+      const ifSuccess = await GetCRUD.post(ctx);
+      if (ifSuccess == 0) {
+        ctx.response.status = 200;
+        ctx.res.statusCode = 200;
         ctx.body = {
-            success: false,
-            "Message":"Unable to save the data."
+          success: false,
+          Message: "already exist",
+        };
+      } else {
+        ctx.response.status = 201;
+        ctx.body = {
+          success: true,
+          Message: "success",
+        };
+      }
+    } else {
+      ctx.response.status = 401;
+      ctx.body = {
+        success: false,
+        Message: "Unable to save the data.",
+      };
+    }
+  });
+  router.get("/api/get/product/takaful", async (ctx, next) => {
+    if (ctx.req.method === "GET") {
+      const productData = await GetCRUD.getProductData();
+      ctx.response.status = 201;
+      ctx.body = {
+        success: true,
+        Message: "success",
+        data: productData,
+      };
+    }
+  });
+  router.get("/api/get/plan/takaful", async (ctx, next) => {
+    if (ctx.req.method === "GET") {
+      const planData = await GetCRUD.getPlanData();
+      ctx.response.status = 201;
+      ctx.body = {
+        success: true,
+        Message: "success",
+        data: planData,
+      };
+    }
+  });
+  router.get("/api/get/orders/list", async (ctx, next) => {
+    if (ctx.req.method === "GET") {
+      const orderData = await GetCRUD.getOrderData();
+      ctx.response.status = 201;
+      ctx.body = {
+        success: true,
+        Message: "success",
+        data: orderData,
+      };
+    }
+  });
+
+  router.post("/api/store/product/takaful", async (ctx, next) => {
+    if (ctx.req.method === "POST") {
+      const planData = await GetCRUD.storeProductForTakaful(ctx);
+      ctx.response.status = 201;
+      ctx.body = {
+        success: true,
+        Message: "success",
+        data: planData,
+      };
+    }
+  });
+  // router.post(
+  //   'submit/variant',
+  //   async (ctx, next) => {
+  //     console.log(accessTokenExport);
+
+  //         ctx.response.status = 201;
+  //         ctx.body = {
+  //             success: true,
+  //             "Message":"submit variant Successfully",
+  //         };
+
+  //   }
+  // );
+
+  router.post("/apps/api/get/cart", async (ctx, next) => {
+    if (ctx.req.method === "POST") {
+      let returnData = "";
+      console.log(accessTokenExport);
+      let policy = await GetCRUD.getpolicybyId(ctx);
+      console.log(policy);
+      if (policy != 0) {
+        for (let i = 0; i < policy.length; i++) {
+          let obj = {
+            option1: policy[i].name,
+            price: policy[i].amount,
+          };
+          console.log("OBJ", obj);
+          let requestData = ctx.request.body;
+
+          let JSONDataResponse = await GetCRUD.getVariantByname(
+            requestData.product_id,
+            policy[i].name,
+            accessTokenExport
+          );
+          console.log("JSONDataResponser", JSONDataResponse);
+          if (JSONDataResponse == 0) {
+            let respondse = await fetch(
+              "https://winstor-pk.myshopify.com/admin/api/2022-01/products/" +
+                requestData.product_id +
+                "/variants.json",
+              {
+                method: "POST",
+                headers: {
+                  "X-Shopify-Access-Token": accessTokenExport,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ variant: obj }),
+              }
+            );
+            returnData = await respondse.json();
+            //Varinat inventory
+            let inventory = {
+              location_id: 65599897855,
+              inventory_item_id: returnData.variant.inventory_item_id,
+              available_adjustment: 1,
+            };
+            let dataInventory = await fetch(
+              "https://winstor-pk.myshopify.com/admin/api/2022-01/inventory_levels/adjust.json",
+              {
+                method: "POST",
+                headers: {
+                  "X-Shopify-Access-Token": accessTokenExport,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(inventory),
+              }
+            );
+            await dataInventory.json();
+            returnData = returnData.variant.id;
+          } else {
+            returnData = JSONDataResponse[0].id;
+          }
+        }
+        console.log("returnData", returnData);
+        ctx.response.status = 201;
+        ctx.body = {
+          success: true,
+          Message: "success cart update",
+          data: returnData,
+        };
+      }
+    } else {
+      ctx.response.status = 201;
+      ctx.body = {
+        success: false,
+        Message: "Bundle id not found",
+      };
+    }
+  });
+
+  router.post("/apps/api/get/product/takaful/id", async (ctx, next) => {
+    // console.log(accessTokenExport);
+    if (ctx.req.method === "POST") {
+      const planData = await GetCRUD.getProductByIdTakaful(ctx);
+      if (planData) {
+        let policy = await GetCRUD.getpolicy(ctx);
+        // for(let i =0 ;i <policy.length;i++){
+        //   let obj={
+        //     "option1":policy[i].name,
+        //     "price":policy[i].amount
+        //   };
+        //   console.log("OBJ",obj);
+        //   let respondse=await fetch('https://winstor-pk.myshopify.com/admin/api/2022-01/products/7592863531263/variants.json', {
+        //     method: 'POST',
+        //     headers: {
+        //       "X-Shopify-Access-Token": accessTokenExport,
+        //       "Content-Type": "application/json",
+        //     },
+        //     body:JSON.stringify({"variant":obj}),
+        //   });
+        //   console.log(respondse);
+        // }
+
+        ctx.response.status = 201;
+        ctx.body = {
+          success: true,
+          Message: "success",
+          data: policy,
+        };
+      } else {
+        ctx.response.status = 200;
+        ctx.body = {
+          success: false,
+          Message: "record not found",
         };
       }
     }
-  );
-  router.get( 
-    "/api/get/product/takaful",
-    async (ctx, next) => {
-      if(ctx.req.method === "GET"){
-        const productData  = await GetCRUD.getProductData();
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success",
-              "data":productData
-          };
-        }
-    }
-  ); 
-  router.get( 
-    "/api/get/plan/takaful",
-    async (ctx, next) => {
-      if(ctx.req.method === "GET"){
-        const planData  = await GetCRUD.getPlanData();
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success",
-              "data":planData
-          };
-        }
-    }
-  );
-  router.get( 
-    "/api/get/orders/list",
-    async (ctx, next) => {
-      if(ctx.req.method === "GET"){
-        const orderData  = await GetCRUD.getOrderData();
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success",
-              "data":orderData
-          };
-        }
-    }
-  );
-  
-  router.post( 
-    "/api/store/product/takaful",
-    async (ctx, next) => {
-      if(ctx.req.method === "POST"){
-        const planData  = await GetCRUD.storeProductForTakaful(ctx); 
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success",
-              "data":planData
-          };
-        }
-    }
-  );
-  router.post( 
-    "/apps/api/get/product/takaful/id",
-    async (ctx, next) => {
-      if(ctx.req.method === "POST"){
-        const planData  = await GetCRUD.getProductByIdTakaful(ctx); 
-        if(planData){
-          let policy =await GetCRUD.getpolicy(ctx);
-          ctx.response.status = 201;
-          ctx.body = {
-              success: true,
-              "Message":"success",
-              "data":policy
-          };
-        }else{
-          ctx.response.status = 200;
-          ctx.body = {
-              success: false,
-              "Message":"record not found",
-          };
-        }
-
-        }
-    }
-  );
+  });
+  function exportTokens(shop, accessToken) {
+    accessTokenExport = accessToken;
+    shopExport = shop;
+  }
   //
   router.post(
     "/graphql",
@@ -221,7 +320,10 @@ app.prepare().then(async () => {
 
   server.use(router.allowedMethods());
   server.use(router.routes());
-  server.listen(port, () => {
+  //server.listen(port, () => {
+  // console.log(`> Ready on http://localhost:${port}`);
+  //});
+  server.listen(port, "0.0.0.0", function () {
     console.log(`> Ready on http://localhost:${port}`);
   });
 });
