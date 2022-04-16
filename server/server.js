@@ -56,6 +56,7 @@ app.prepare().then(async () => {
         ACTIVE_SHOPIFY_SHOPS[shop] = scope;
 
         exportTokens(shop, accessToken);
+        console.log(accessToken);
 
         const responses = await Shopify.Webhooks.Registry.register({
           shop,
@@ -155,7 +156,10 @@ app.prepare().then(async () => {
 
   router.post("/api/store/product/takaful", async (ctx, next) => {
     if (ctx.req.method === "POST") {
-      const planData = await GetCRUD.storeProductForTakaful(ctx);
+      const planData = await GetCRUD.storeProductForTakaful(
+        ctx,
+        accessTokenExport
+      );
       ctx.response.status = 201;
       ctx.body = {
         success: true,
@@ -178,13 +182,88 @@ app.prepare().then(async () => {
   //   }
   // );
 
-  router.post("/apps/api/get/cart", async (ctx, next) => {
+  // router.post("/apps/api/get/cart", async (ctx, next) => {
+  //   if (ctx.req.method === "POST") {
+  //     let returnData = "";
+  //     console.log(accessTokenExport);
+  //     let policy = await GetCRUD.getpolicybyId(ctx);
+  //     console.log(policy);
+  //     if (policy != 0) {
+  //       for (let i = 0; i < policy.length; i++) {
+  //         let obj = {
+  //           option1: policy[i].name,
+  //           price: policy[i].amount,
+  //         };
+  //         console.log("OBJ", obj);
+  //         let requestData = ctx.request.body;
+
+  //         let JSONDataResponse = await GetCRUD.getVariantByname(
+  //           requestData.product_id,
+  //           policy[i].name,
+  //           accessTokenExport
+  //         );
+  //         console.log("JSONDataResponser", JSONDataResponse);
+  //         if (JSONDataResponse == 0) {
+  //           let respondse = await fetch(
+  //             "https://winstor-pk.myshopify.com/admin/api/2022-01/products/" +
+  //               requestData.product_id +
+  //               "/variants.json",
+  //             {
+  //               method: "POST",
+  //               headers: {
+  //                 "X-Shopify-Access-Token": accessTokenExport,
+  //                 "Content-Type": "application/json",
+  //               },
+  //               body: JSON.stringify({ variant: obj }),
+  //             }
+  //           );
+  //           returnData = await respondse.json();
+  //           //Varinat inventory
+  //           let inventory = {
+  //             location_id: 65599897855,
+  //             inventory_item_id: returnData.variant.inventory_item_id,
+  //             available_adjustment: 1,
+  //           };
+  //           let dataInventory = await fetch(
+  //             "https://winstor-pk.myshopify.com/admin/api/2022-01/inventory_levels/adjust.json",
+  //             {
+  //               method: "POST",
+  //               headers: {
+  //                 "X-Shopify-Access-Token": accessTokenExport,
+  //                 "Content-Type": "application/json",
+  //               },
+  //               body: JSON.stringify(inventory),
+  //             }
+  //           );
+  //           await dataInventory.json();
+  //           returnData = returnData.variant.id;
+  //         } else {
+  //           returnData = JSONDataResponse[0].id;
+  //         }
+  //       }
+  //       console.log("returnData", returnData);
+  //       ctx.response.status = 201;
+  //       ctx.body = {
+  //         success: true,
+  //         Message: "success cart update",
+  //         data: returnData,
+  //       };
+  //     }
+  //   } else {
+  //     ctx.response.status = 201;
+  //     ctx.body = {
+  //       success: false,
+  //       Message: "Bundle id not found",
+  //     };
+  //   }
+  // });
+
+  router.post("/apps/api/get/product/takaful/id", async (ctx, next) => {
+    console.log(accessTokenExport);
     if (ctx.req.method === "POST") {
-      let returnData = "";
-      console.log(accessTokenExport);
-      let policy = await GetCRUD.getpolicybyId(ctx);
-      console.log(policy);
-      if (policy != 0) {
+      const planData = await GetCRUD.getProductByIdTakaful(ctx);
+      if (planData) {
+        let policy = await GetCRUD.getpolicy(ctx);
         for (let i = 0; i < policy.length; i++) {
           let obj = {
             option1: policy[i].name,
@@ -193,89 +272,21 @@ app.prepare().then(async () => {
           console.log("OBJ", obj);
           let requestData = ctx.request.body;
 
-          let JSONDataResponse = await GetCRUD.getVariantByname(
-            requestData.product_id,
-            policy[i].name,
-            accessTokenExport
+          let respondse = await fetch(
+            "https://winstor-pk.myshopify.com/admin/api/2022-01/products/" +
+              requestData.product_id +
+              "/variants.json",
+            {
+              method: "POST",
+              headers: {
+                "X-Shopify-Access-Token": accessTokenExport,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ variant: obj }),
+            }
           );
-          console.log("JSONDataResponser", JSONDataResponse);
-          if (JSONDataResponse == 0) {
-            let respondse = await fetch(
-              "https://winstor-pk.myshopify.com/admin/api/2022-01/products/" +
-                requestData.product_id +
-                "/variants.json",
-              {
-                method: "POST",
-                headers: {
-                  "X-Shopify-Access-Token": accessTokenExport,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ variant: obj }),
-              }
-            );
-            returnData = await respondse.json();
-            //Varinat inventory
-            let inventory = {
-              location_id: 65599897855,
-              inventory_item_id: returnData.variant.inventory_item_id,
-              available_adjustment: 1,
-            };
-            let dataInventory = await fetch(
-              "https://winstor-pk.myshopify.com/admin/api/2022-01/inventory_levels/adjust.json",
-              {
-                method: "POST",
-                headers: {
-                  "X-Shopify-Access-Token": accessTokenExport,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(inventory),
-              }
-            );
-            await dataInventory.json();
-            returnData = returnData.variant.id;
-          } else {
-            returnData = JSONDataResponse[0].id;
-          }
+          console.log(respondse);
         }
-        console.log("returnData", returnData);
-        ctx.response.status = 201;
-        ctx.body = {
-          success: true,
-          Message: "success cart update",
-          data: returnData,
-        };
-      }
-    } else {
-      ctx.response.status = 201;
-      ctx.body = {
-        success: false,
-        Message: "Bundle id not found",
-      };
-    }
-  });
-
-  router.post("/apps/api/get/product/takaful/id", async (ctx, next) => {
-    // console.log(accessTokenExport);
-    if (ctx.req.method === "POST") {
-      const planData = await GetCRUD.getProductByIdTakaful(ctx);
-      if (planData) {
-        let policy = await GetCRUD.getpolicy(ctx);
-        // for(let i =0 ;i <policy.length;i++){
-        //   let obj={
-        //     "option1":policy[i].name,
-        //     "price":policy[i].amount
-        //   };
-        //   console.log("OBJ",obj);
-        //   let respondse=await fetch('https://winstor-pk.myshopify.com/admin/api/2022-01/products/7592863531263/variants.json', {
-        //     method: 'POST',
-        //     headers: {
-        //       "X-Shopify-Access-Token": accessTokenExport,
-        //       "Content-Type": "application/json",
-        //     },
-        //     body:JSON.stringify({"variant":obj}),
-        //   });
-        //   console.log(respondse);
-        // }
 
         ctx.response.status = 201;
         ctx.body = {
@@ -327,3 +338,10 @@ app.prepare().then(async () => {
     console.log(`> Ready on http://localhost:${port}`);
   });
 });
+// curl -d '{"product":{"id":7592863531263,"tags":["tk","takafull"]}}' \
+// -X PUT "https://winstor-pk.myshopify.com/admin/api/2022-04/products/7592863531263.json" \
+// -H "X-Shopify-Access-Token: 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" \
+// -H "Content-Type: application/json"
+
+// curl -X GET "https://winstor-pk.myshopify.com/admin/api/2022-04/products/7592863531263.json" \
+// -H "X-Shopify-Access-Token: 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"

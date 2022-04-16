@@ -1,4 +1,6 @@
 import Shopify from "@shopify/shopify-api";
+import { parseGid } from "@shopify/admin-graphql-api-utilities";
+
 const {
   OrderWebhookCallBack,
   findAndCreate,
@@ -10,6 +12,7 @@ const {
   getOrderDataMySQL,
   updateOrderwithPolicy,
   getpolicybyIdMySql,
+  getProductTakafulDataForRemoveTag,
 } = require("../mysqlidb");
 
 async function post(ctx) {
@@ -76,7 +79,101 @@ async function post(ctx) {
   updateOrderwithPolicy(data, policy);
   return 1;
 }
-async function storeProductForTakaful(ctx) {
+async function addTakafullTag(ctx, token) {
+  let data = ctx.request.body;
+  for (let i = 0; i < data.selection.length; i++) {
+    let respondse = await fetch(
+      "https://winstor-pk.myshopify.com/admin/api/2022-04/products/" +
+        parseGid(data.selection[i].id) +
+        ".json",
+      {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    let returnData = await respondse.json();
+    let tagsData = returnData.product.tags.split(",");
+    let obj = {
+      id: parseGid(data.selection[i].id),
+      tags: returnData.product.tags + ",takafull",
+    };
+    await fetch(
+      "https://winstor-pk.myshopify.com/admin/api/2022-04/products/" +
+        parseGid(data.selection[i].id) +
+        ".json",
+      {
+        method: "PUT",
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ product: obj }),
+      }
+    );
+  }
+
+  return 1;
+}
+
+async function removeTakafullTaf(token) {
+  let ids = await getProductTakafulDataForRemoveTag();
+  console.log(ids);
+  if (ids.length != 0) {
+    for (let i = 0; i < ids.length; i++) {
+      console.log("Incremnet " + i);
+      console.log("product Id " + ids[i].product_id);
+      let respondse = await fetch(
+        "https://winstor-pk.myshopify.com/admin/api/2022-04/products/" +
+          ids[i].product_id +
+          ".json",
+        {
+          method: "GET",
+          headers: {
+            "X-Shopify-Access-Token": token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      let returnData = await respondse.json();
+      let tagsData = returnData.product.tags.split(",");
+      console.log("before Filter", tagsData);
+      if (tagsData.includes(" takafull")) {
+        tagsData = tagsData.filter(function (item) {
+          return item !== " takafull";
+        });
+        console.log("After Filter", tagsData);
+
+        let obj = {
+          id: parseGid(ids[i].product_id),
+          tags: tagsData.toString(),
+        };
+        console.log("obj", obj);
+
+        await fetch(
+          "https://winstor-pk.myshopify.com/admin/api/2022-04/products/" +
+            ids[i].product_id +
+            ".json",
+          {
+            method: "PUT",
+            headers: {
+              "X-Shopify-Access-Token": token,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ product: obj }),
+          }
+        );
+      }
+    }
+  }
+
+  return 1;
+}
+async function storeProductForTakaful(ctx, token) {
+  await removeTakafullTaf(token);
+  await addTakafullTag(ctx, token);
   return await storeProduct(ctx);
 }
 async function getProductData() {

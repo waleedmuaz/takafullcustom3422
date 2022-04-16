@@ -89,6 +89,25 @@ async function getProductTakafulData() {
   }
   return ProductData;
 }
+async function getProductTakafulDataForRemoveTag() {
+  let ProductData = 0;
+  try {
+    let query = new Promise((resolve, reject) => {
+      connection.query(
+        `SELECT * FROM products_takaful_pivot`,
+        function (error, results, fields) {
+          ProductData = results;
+          resolve();
+        }
+      );
+    });
+    await query;
+    return ProductData;
+  } catch (err) {
+    console.log(err);
+  }
+  return ProductData;
+}
 async function getPlanTakafulData() {
   let PlansData = {};
   try {
@@ -121,8 +140,6 @@ async function storeProduct(ctx) {
         createdAt: element.createdAt,
         vendor: element.vendor,
       };
-      console.log("title", element.title);
-      console.log("total", jsonData);
       connection.query(
         "INSERT INTO products_takaful_pivot (product_id, product_json, status) VALUES ('" +
           parseGid(element.id) +
@@ -133,6 +150,7 @@ async function storeProduct(ctx) {
           if (error) throw error;
         }
       );
+
       return true;
     } catch (err) {
       if (err) throw err;
@@ -239,4 +257,5 @@ module.exports = {
   getOrderDataMySQL,
   updateOrderwithPolicy,
   getpolicybyIdMySql,
+  getProductTakafulDataForRemoveTag,
 };
